@@ -1,0 +1,222 @@
+openapi: 3.1.0
+info:
+  title: Activity Log Service API
+  version: 1.0.0
+  description: Asynchronous ingestion and cursor-paginated retrieval of processed user activity.
+servers:
+  - url: http://localhost:3000
+paths:
+  /api/v1/activity-logs:
+    post:
+      summary: Submit a user activity for asynchronous processing
+      operationId: submitActivityLog
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateActivityLog'
+            example:
+              userId: user-123
+              action: LOGIN
+              source: web
+              occurredAt: '2026-09-21T18:30:00.000Z'
+              resource:
+                type: session
+                id: session-456
+              metadata:
+                ipAddress: 192.0.2.10
+      responses:
+        '202':
+          description: Event accepted by Kafka
+          headers:
+            x-request-id:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/AcceptedActivityLog'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      summary: List processed activity logs
+      operationId: listActivityLogs
+      parameters:
+        - $ref: '#/components/parameters/RequestId'
+        - name: userId
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: action
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: source
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 128 }
+        - name: from
+          in: query
+          description: Inclusive lower bound for occurrence time.
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          description: Inclusive upper bound for occurrence time.
+          schema: { type: string, format: date-time }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+        - name: cursor
+          in: query
+          description: Opaque cursor returned by the preceding page.
+          schema: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: A newest-first page of processed logs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, pageInfo]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ActivityLog'
+                  pageInfo:
+                    $ref: '#/components/schemas/PageInfo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /health/live:
+    get:
+      summary: Process liveness
+      operationId: liveness
+      responses:
+        '200':
+          description: Process is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Liveness'
+  /health/ready:
+    get:
+      summary: Dependency readiness
+      operationId: readiness
+      responses:
+        '200':
+          description: Dependencies are ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+        '503':
+          description: One or more dependencies are unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+components:
+  parameters:
+    RequestId:
+      name: x-request-id
+      in: header
+      required: false
+      description: Optional caller-provided correlation ID; generated when absent.
+      schema: { type: string, maxLength: 128 }
+  responses:
+    BadRequest:
+      description: Invalid request data or pagination cursor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Unexpected server or dependency failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    ActivityResource:
+      type: object
+      additionalProperties: false
+      required: [type, id]
+      properties:
+        type: { type: string, minLength: 1, maxLength: 128 }
+        id: { type: string, minLength: 1, maxLength: 128 }
+    CreateActivityLog:
+      type: object
+      additionalProperties: false
+      required: [userId, action, source]
+      properties:
+        userId: { type: string, minLength: 1, maxLength: 128 }
+        action: { type: string, minLength: 1, maxLength: 128 }
+        source: { type: string, minLength: 1, maxLength: 128 }
+        occurredAt: { type: string, format: date-time }
+        resource:
+          $ref: '#/components/schemas/ActivityResource'
+        metadata:
+          type: object
+          additionalProperties: true
+    AcceptedActivityLog:
+      type: object
+      required: [eventId, correlationId, status]
+      properties:
+        eventId: { type: string, format: uuid }
+        correlationId: { type: string }
+        status: { type: string, const: accepted }
+    ActivityLog:
+      allOf:
+        - $ref: '#/components/schemas/CreateActivityLog'
+        - type: object
+          required: [id, eventId, eventType, correlationId, occurredAt, receivedAt, processedAt]
+          properties:
+            id: { type: string }
+            eventId: { type: string, format: uuid }
+            eventType: { type: string, const: user.activity.recorded }
+            correlationId: { type: string }
+            occurredAt: { type: string, format: date-time }
+            receivedAt: { type: string, format: date-time }
+            processedAt: { type: string, format: date-time }
+    PageInfo:
+      type: object
+      required: [hasNext, nextCursor]
+      properties:
+        hasNext: { type: boolean }
+        nextCursor:
+          type: [string, 'null']
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: {}
+            requestId: { type: string }
+    Liveness:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, const: ok }
+    Readiness:
+      type: object
+      required: [status, dependencies]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        dependencies:
+          type: object
+          additionalProperties: { type: boolean }
