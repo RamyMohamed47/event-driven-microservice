@@ -1,0 +1,47 @@
+{
+  "name": "event-driven-microservice",
+  "version": "1.0.0",
+  "description": "Event-driven user activity log service using Express, Kafka, and MongoDB",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev:api": "tsx watch src/api.ts",
+    "dev:worker": "tsx watch src/worker.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start:api": "node dist/api.js",
+    "start:worker": "node dist/worker.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node scripts/e2e.mjs",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "kafkajs": "^2.2.4",
+    "mongoose": "^9.0.0",
+    "pino": "^9.9.4",
+    "pino-http": "^10.5.0",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.5.2",
+    "@types/supertest": "^6.0.3",
+    "eslint": "^10.11.0",
+    "prettier": "^3.6.2",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.44.1",
+    "vitest": "^5.0.1"
+  }
+}
